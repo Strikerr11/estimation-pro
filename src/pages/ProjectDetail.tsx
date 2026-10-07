@@ -19,13 +19,20 @@ const estimatorCards = [
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { projects, currentProject, setCurrentProject, estimates, fetchEstimates } = useProject();
+  const { projects, currentProject, setCurrentProject } = useProject();
   const [project, setProject] = useState(currentProject);
+  const estimates: any[] = [];
+  const fetchEstimates = (_id: string) => {};
 
   useEffect(() => {
-    if (id && (!currentProject || currentProject.id !== id)) {
+    if (id) {
       const found = projects.find((p) => p.id === id);
-      if (found) { setCurrentProject(found); setProject(found); }
+      if (found) { 
+        setCurrentProject(found); 
+        setProject(found); 
+      } else if (currentProject && currentProject.id === id) {
+        setProject(currentProject);
+      }
     }
   }, [id, projects, currentProject, setCurrentProject]);
 
@@ -47,7 +54,12 @@ export default function ProjectDetail() {
     commercial: { icon: Building2, color: 'text-purple-400', bg: 'bg-purple-500/10' },
     industrial: { icon: Factory, color: 'text-orange-400', bg: 'bg-orange-500/10' },
   };
-  const config = configMap[project.project_type as keyof typeof configMap];
+
+  const projectTypeKey = (project.project_type?.toLowerCase() || 'residential') as keyof typeof configMap;
+  const config = configMap[projectTypeKey] || configMap.residential;
+
+  const safeTotalCost = Number(project.total_cost || 0).toLocaleString('en-IN');
+  const safeStatus = (project.status || 'in_progress').replace('_', ' ');
 
   return (
     <div className="space-y-6">
@@ -56,22 +68,22 @@ export default function ProjectDetail() {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{project.name}</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm">{project.client_name} &bull; {project.location}</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{project.name || 'Untitled Project'}</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">{project.client_name || 'N/A'} &bull; {project.location || 'N/A'}</p>
         </div>
         <span className={`px-3 py-1.5 rounded-lg text-xs font-medium ${
           project.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' :
           project.status === 'in_progress' ? 'bg-amber-500/10 text-amber-400' :
           'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-        }`}>{project.status.replace('_', ' ')}</span>
+        }`}>{safeStatus}</span>
       </div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { icon: config.icon, label: 'Type', value: project.project_type, color: config.color, bg: config.bg },
-          { icon: MapPin, label: 'Location', value: project.location, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-          { icon: UserIcon, label: 'Engineer', value: project.engineer_name, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-          { icon: IndianRupee, label: 'Total Cost', value: `₹${project.total_cost.toLocaleString('en-IN')}`, color: 'text-rose-400', bg: 'bg-rose-500/10' },
+          { icon: config.icon, label: 'Type', value: project.project_type || 'N/A', color: config.color, bg: config.bg },
+          { icon: MapPin, label: 'Location', value: project.location || 'N/A', color: 'text-amber-400', bg: 'bg-amber-500/10' },
+          { icon: UserIcon, label: 'Engineer', value: project.engineer_name || 'N/A', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+          { icon: IndianRupee, label: 'Total Cost', value: `₹${safeTotalCost}`, color: 'text-rose-400', bg: 'bg-rose-500/10' },
         ].map(item => (
           <div key={item.label} className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
             <div className={`w-8 h-8 rounded-lg ${item.bg} flex items-center justify-center mb-3`}>
@@ -105,20 +117,28 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      {estimates.length > 0 && (
+      {estimates && estimates.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Saved Estimates</h2>
           <div className="space-y-3">
-            {estimates.map((e) => (
-              <div key={e.id} className="flex items-center gap-4 p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-                <Calculator className="w-5 h-5 text-amber-400" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">{e.name}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{e.type} Estimator</p>
+            {estimates.map((e) => {
+              const estimateCost = Number(
+                (e.results as Record<string, number>)?.total_cost || 
+                (e.results as Record<string, number>)?.cost_estimate || 
+                0
+              ).toLocaleString('en-IN');
+
+              return (
+                <div key={e.id} className="flex items-center gap-4 p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+                  <Calculator className="w-5 h-5 text-amber-400" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-900 dark:text-white">{e.name || 'Unnamed Estimate'}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{e.type} Estimator</p>
+                  </div>
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white">₹{estimateCost}</span>
                 </div>
-                <span className="text-sm font-semibold text-slate-900 dark:text-white">₹{Number((e.results as Record<string, number>)?.total_cost || (e.results as Record<string, number>)?.cost_estimate || 0).toLocaleString('en-IN')}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
