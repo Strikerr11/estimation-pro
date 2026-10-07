@@ -8,7 +8,7 @@ import AuthPage from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
-import Estimators from './pages/estimators'; // Adjust path if needed
+import Estimators from './pages/Estimators'; // Adjust path if needed
 import WindowEstimator from './pages/estimators/WindowEstimator';
 import DoorEstimator from './pages/estimators/DoorEstimator';
 import BrickworkEstimator from './pages/estimators/BrickworkEstimator';
