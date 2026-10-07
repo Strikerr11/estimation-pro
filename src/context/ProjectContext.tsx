@@ -1,114 +1,99 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Project } from '../types';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { Project } from '../types';
 
 interface ProjectContextType {
   projects: Project[];
-  currentProject: Project | null;
   loading: boolean;
-  setCurrentProject: (project: Project | null) => void;
-  createProject: (project: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'user_id'>) => Promise<Project>;
-  updateProject: (id: string, project: Partial<Project>) => Promise<void>;
+  addProject: (project: Omit<Project, 'id' | 'created_at'>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
+  refreshProjects: () => Promise<void>;
 }
 
 const ProjectContext = createContext<ProjectContextType>({
   projects: [],
-  currentProject: null,
   loading: true,
-  setCurrentProject: () => {},
-  createProject: async () => ({} as Project),
-  updateProject: async () => {},
+  addProject: async () => {},
   deleteProject: async () => {},
+  refreshProjects: async () => {},
 });
 
-// Helper for local storage persistence
-const getStoredProjects = (userId: string): Project[] => {
-  const data = localStorage.getItem(`mock_projects_${userId}`);
-  return data ? JSON.parse(data) : [];
-};
-
-const saveStoredProjects = (userId: string, projects: Project[]) => {
-  localStorage.setItem(`mock_projects_${userId}`, JSON.stringify(projects));
-};
-
-export function ProjectProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
-  useEffect(() => {
-    if (user) {
-      const stored = getStoredProjects(user.id);
-      setProjects(stored);
-      if (stored.length > 0 && !currentProject) {
-        setCurrentProject(stored[0]);
-      }
-    } else {
+  const fetchProjects = async () => {
+    if (!user) {
       setProjects([]);
-      setCurrentProject(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching projects:', error.message);
+    } else if (data) {
+      setProjects(data as Project[]);
     }
     setLoading(false);
-  }, [user]);
-
-  const createProject = async (projectData: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'user_id'>) => {
-    if (!user) throw new Error('User not authenticated');
-
-    const newProject: Project = {
-      ...projectData,
-      id: 'proj_' + Date.now(),
-      user_id: user.id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    const updatedProjects = [newProject, ...projects];
-    setProjects(updatedProjects);
-    setCurrentProject(newProject);
-    saveStoredProjects(user.id, updatedProjects);
-
-    return newProject;
   };
 
-  const updateProject = async (id: string, projectData: Partial<Project>) => {
+  useEffect(() => {
+    fetchProjects();
+  }, [user]);
+
+  const addProject = async (newProject: Omit<Project, 'id' | 'created_at'>) => {
     if (!user) return;
-    const updatedProjects = projects.map((p) =>
-      p.id === id ? { ...p, ...projectData, updated_at: new Date().toISOString() } : p
-    );
-    setProjects(updatedProjects);
-    if (currentProject?.id === id) {
-      setCurrentProject({ ...currentProject, ...projectData, updated_at: new Date().toISOString() });
+
+    const { data, error } = await supabase
+      .from('projects')
+      .insert([{ ...newProject, user_id: user.id }])
+      .select();
+
+    if (error) {
+      console.error('Error adding project:', error.message);
+      throw new Error(error.message);
+    } else if (data) {
+      setProjects((prev) => [data[0] as Project, ...prev]);
     }
-    saveStoredProjects(user.id, updatedProjects);
   };
 
   const deleteProject = async (id: string) => {
     if (!user) return;
-    const updatedProjects = projects.filter((p) => p.id !== id);
-    setProjects(updatedProjects);
-    if (currentProject?.id === id) {
-      setCurrentProject(updatedProjects[0] || null);
+
+    const { error } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting project:', error.message);
+      throw new Error(error.message);
+    } else {
+      setProjects((prev) => prev.filter((p) => p.id !== id));
     }
-    saveStoredProjects(user.id, updatedProjects);
   };
 
   return (
     <ProjectContext.Provider
       value={{
         projects,
-        currentProject,
         loading,
-        setCurrentProject,
-        createProject,
-        updateProject,
+        addProject,
         deleteProject,
+        refreshProjects: fetchProjects,
       }}
     >
       {children}
     </ProjectContext.Provider>
   );
-}
+};
 
 export const useProjects = () => useContext(ProjectContext);
-export const useProject = useProjects;

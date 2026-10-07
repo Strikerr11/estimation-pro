@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, UserRole } from '../types';
 import type { Session } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -20,74 +21,82 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 });
 
-// Helper to get all registered users stored in browser memory
-const getRegisteredUsers = (): Record<string, { user: User; password: string }> => {
-  const data = localStorage.getItem('mock_registered_users');
-  return data ? JSON.parse(data) : {};
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper to construct app User type from Supabase auth user
+  const mapSupabaseUser = (sbUser: any): User => ({
+    id: sbUser.id,
+    email: sbUser.email || '',
+    full_name: sbUser.user_metadata?.full_name || 'User',
+    role: (sbUser.user_metadata?.role as UserRole) || 'estimator',
+    company: sbUser.user_metadata?.company || 'Construction Co.',
+    created_at: sbUser.created_at || new Date().toISOString(),
+  });
+
   useEffect(() => {
-    // Restore current active session if logged in
-    const activeSession = localStorage.getItem('mock_active_session');
-    if (activeSession) {
-      setUser(JSON.parse(activeSession));
-    }
-    setLoading(false);
+    // 1. Get initial session from Supabase
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ? mapSupabaseUser(session.user) : null);
+      setLoading(false);
+    });
+
+    // 2. Listen for real-time authentication state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ? mapSupabaseUser(session.user) : null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string, role: UserRole) => {
-    const cleanEmail = email.toLowerCase().trim();
-    const registeredUsers = getRegisteredUsers();
+    const { data, error } = await supabase.auth.signUp({
+      email: email.toLowerCase().trim(),
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          role: role || 'estimator',
+        },
+      },
+    });
 
-    if (registeredUsers[cleanEmail]) {
-      throw new Error('User already exists with this email.');
+    if (error) {
+      throw new Error(error.message);
     }
 
-    const newUser: User = {
-      id: 'usr_' + Date.now(),
-      email: cleanEmail,
-      full_name: fullName || 'User',
-      role: role || 'estimator',
-      company: 'Demo Company',
-      created_at: new Date().toISOString(),
-    };
-
-    // Save user in local registered database
-    registeredUsers[cleanEmail] = { user: newUser, password };
-    localStorage.setItem('mock_registered_users', JSON.stringify(registeredUsers));
-
-    // Automatically set active user session
-    setUser(newUser);
-    localStorage.setItem('mock_active_session', JSON.stringify(newUser));
+    if (data.user) {
+      setUser(mapSupabaseUser(data.user));
+    }
   };
 
   const signIn = async (email: string, password: string) => {
-    const cleanEmail = email.toLowerCase().trim();
-    const registeredUsers = getRegisteredUsers();
-    const account = registeredUsers[cleanEmail];
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.toLowerCase().trim(),
+      password,
+    });
 
-    if (!account) {
-      throw new Error('No account found with this email. Please register first!');
+    if (error) {
+      throw new Error(error.message);
     }
 
-    if (account.password !== password) {
-      throw new Error('Invalid email or password.');
+    if (data.user) {
+      setUser(mapSupabaseUser(data.user));
     }
-
-    // Login successful
-    setUser(account.user);
-    localStorage.setItem('mock_active_session', JSON.stringify(account.user));
   };
 
   const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('Error logging out:', error.message);
+    }
     setUser(null);
     setSession(null);
-    localStorage.removeItem('mock_active_session');
   };
 
   return (

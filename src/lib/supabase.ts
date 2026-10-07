@@ -1,28 +1,10 @@
-// Completely mock Supabase to avoid all backend network 'Failed to fetch' errors
+import { createClient } from '@supabase/supabase-js';
 
-const createMockChain = () => {
-  const chain: any = {
-    select: () => chain,
-    insert: () => chain,
-    update: () => chain,
-    delete: () => chain,
-    eq: () => chain,
-    neq: () => chain,
-    single: () => Promise.resolve({ data: null, error: null }),
-    then: (resolve: any) => Promise.resolve({ data: [], error: null }).then(resolve),
-  };
-  return chain;
-};
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = {
-  auth: {
-    getSession: async () => ({ data: { session: null }, error: null }),
-    onAuthStateChange: () => ({
-      data: { subscription: { unsubscribe: () => {} } },
-    }),
-    signUp: async () => ({ data: { user: null }, error: null }),
-    signInWithPassword: async () => ({ data: { user: null }, error: null }),
-    signOut: async () => ({ error: null }),
-  },
-  from: () => createMockChain(),
-} as any;
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Missing Supabase environment variables in .env');
+}
+
+export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
