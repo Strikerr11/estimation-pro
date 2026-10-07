@@ -111,3 +111,4 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 }
 
 export const useProjects = () => useContext(ProjectContext);
+export const useProject = useProjects;

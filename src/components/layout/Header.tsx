@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../../context/ThemeContext';
-import { useProject } from '../../context/ProjectContext';
+import { useProjects } from '../../context/ProjectContext';
 import { useAuth } from '../../context/AuthContext';
 import { Sun, Moon, Bell, User, HardHat, FolderKanban, LogOut } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 export default function Header() {
   const { theme, toggleTheme } = useTheme();
-  const { currentProject } = useProject();
+  const { currentProject } = useProjects();
   const { user, signOut } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
