@@ -20,50 +20,74 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 });
 
+// Helper to get all registered users stored in browser memory
+const getRegisteredUsers = (): Record<string, { user: User; password: string }> => {
+  const data = localStorage.getItem('mock_registered_users');
+  return data ? JSON.parse(data) : {};
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Restore saved mock user session from localStorage if available
-    const savedUser = localStorage.getItem('mock_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    // Restore current active session if logged in
+    const activeSession = localStorage.getItem('mock_active_session');
+    if (activeSession) {
+      setUser(JSON.parse(activeSession));
     }
     setLoading(false);
   }, []);
 
-  const signUp = async (email: string, _password: string, fullName: string, role: UserRole) => {
-    const mockUser: User = {
-      id: 'mock-user-id-' + Date.now(),
-      email,
+  const signUp = async (email: string, password: string, fullName: string, role: UserRole) => {
+    const cleanEmail = email.toLowerCase().trim();
+    const registeredUsers = getRegisteredUsers();
+
+    if (registeredUsers[cleanEmail]) {
+      throw new Error('User already exists with this email.');
+    }
+
+    const newUser: User = {
+      id: 'usr_' + Date.now(),
+      email: cleanEmail,
       full_name: fullName || 'User',
       role: role || 'estimator',
       company: 'Demo Company',
       created_at: new Date().toISOString(),
     };
-    setUser(mockUser);
-    localStorage.setItem('mock_user', JSON.stringify(mockUser));
+
+    // Save user in local registered database
+    registeredUsers[cleanEmail] = { user: newUser, password };
+    localStorage.setItem('mock_registered_users', JSON.stringify(registeredUsers));
+
+    // Automatically set active user session
+    setUser(newUser);
+    localStorage.setItem('mock_active_session', JSON.stringify(newUser));
   };
 
-  const signIn = async (email: string, _password: string) => {
-    const mockUser: User = {
-      id: 'mock-user-id-demo',
-      email,
-      full_name: 'Suhaib Amin',
-      role: 'estimator',
-      company: 'Demo Company',
-      created_at: new Date().toISOString(),
-    };
-    setUser(mockUser);
-    localStorage.setItem('mock_user', JSON.stringify(mockUser));
+  const signIn = async (email: string, password: string) => {
+    const cleanEmail = email.toLowerCase().trim();
+    const registeredUsers = getRegisteredUsers();
+    const account = registeredUsers[cleanEmail];
+
+    if (!account) {
+      throw new Error('No account found with this email. Please register first!');
+    }
+
+    if (account.password !== password) {
+      throw new Error('Invalid email or password.');
+    }
+
+    // Login successful
+    setUser(account.user);
+    localStorage.setItem('mock_active_session', JSON.stringify(account.user));
   };
 
   const signOut = async () => {
     setUser(null);
     setSession(null);
-    localStorage.removeItem('mock_user');
+    localStorage.removeItem('mock_active_session');
   };
 
   return (
