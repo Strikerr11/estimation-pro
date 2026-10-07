@@ -1,7 +1,28 @@
-import { createClient } from '@supabase/supabase-js';
+// Completely mock Supabase to avoid all backend network 'Failed to fetch' errors
 
-// Mock values so Vite and Vercel build smoothly without throwing errors
-const supabaseUrl = 'https://xyzcompany.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMDAwfQ.demo';
+const createMockChain = () => {
+  const chain: any = {
+    select: () => chain,
+    insert: () => chain,
+    update: () => chain,
+    delete: () => chain,
+    eq: () => chain,
+    neq: () => chain,
+    single: () => Promise.resolve({ data: null, error: null }),
+    then: (resolve: any) => Promise.resolve({ data: [], error: null }).then(resolve),
+  };
+  return chain;
+};
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = {
+  auth: {
+    getSession: async () => ({ data: { session: null }, error: null }),
+    onAuthStateChange: () => ({
+      data: { subscription: { unsubscribe: () => {} } },
+    }),
+    signUp: async () => ({ data: { user: null }, error: null }),
+    signInWithPassword: async () => ({ data: { user: null }, error: null }),
+    signOut: async () => ({ error: null }),
+  },
+  from: () => createMockChain(),
+} as any;
