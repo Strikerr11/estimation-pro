@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useProject } from '../../context/ProjectContext';
+import { useProjects } from '../../context/ProjectContext';
 import {
   LayoutDashboard, FolderKanban, Calculator, FileText, BarChart3,
   HardHat, ChevronLeft, ChevronRight, BookOpen, DollarSign
@@ -26,7 +26,7 @@ const mobileNavItems = [
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const { currentProject } = useProject();
+  const { currentProject } = useProjects();
   const location = useLocation();
 
   return (
