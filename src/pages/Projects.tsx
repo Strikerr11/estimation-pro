@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Plus, Search, FolderKanban, MoreHorizontal, Trash2, Copy,
-  Building2, Factory, HardHat, X, Calculator, FileText, Briefcase
+  Building2, Factory, HardHat, X, FileText
 } from 'lucide-react';
 import { ProjectType } from '../types';
 
@@ -15,36 +15,70 @@ const projectTypeConfig = {
 };
 
 export default function Projects() {
-  const { projects, createProject, deleteProject, duplicateProject, setCurrentProject } = useProject();
+  const context = useProject() as any;
+  const projects = context.projects || [];
   const navigate = useNavigate();
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+
   const [form, setForm] = useState({
-    name: '', client_name: '', location: '', engineer_name: '',
-    project_type: 'residential' as ProjectType, date: new Date().toISOString().split('T')[0],
-    notes: '', status: 'draft' as 'draft' | 'in_progress' | 'completed',
+    name: '',
+    client_name: '',
+    location: '',
+    engineer_name: '',
+    project_type: 'residential' as ProjectType,
+    date: new Date().toISOString().split('T')[0],
+    notes: '',
+    status: 'in_progress' as 'draft' | 'in_progress' | 'completed',
+    total_cost: 0,
   });
 
-  const filteredProjects = projects.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.client_name.toLowerCase().includes(search.toLowerCase());
-    const matchesType = filterType === 'all' || p.project_type === filterType;
+  const filteredProjects = projects.filter((p: any) => {
+    const nameStr = (p?.name || '').toLowerCase();
+    const clientStr = (p?.client_name || '').toLowerCase();
+    const searchStr = search.toLowerCase();
+
+    const matchesSearch = nameStr.includes(searchStr) || clientStr.includes(searchStr);
+    const matchesType = filterType === 'all' || p?.project_type === filterType;
     return matchesSearch && matchesType;
   });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newProject = await createProject(form);
-    setShowCreate(false);
-    setCurrentProject(newProject);
-    navigate(`/projects/${newProject.id}`);
+    if (!form.name.trim()) return;
+
+    try {
+      const payload = {
+        ...form,
+        total_cost: Number(form.total_cost || 0),
+      };
+
+      const createFn = context.createProject || context.addProject;
+      let newProject;
+      if (createFn) {
+        newProject = await createFn(payload);
+      }
+
+      setShowCreate(false);
+
+      if (newProject && newProject.id) {
+        if (context.setCurrentProject) context.setCurrentProject(newProject);
+        navigate(`/projects/${newProject.id}`);
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Failed to create project:', err);
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('Delete this project? This cannot be undone.')) {
-      await deleteProject(id);
+      if (context.deleteProject) {
+        await context.deleteProject(id);
+      }
     }
   };
 
@@ -100,17 +134,21 @@ export default function Projects() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredProjects.map((project, idx: number) => {
-            const config = projectTypeConfig[project.project_type as keyof typeof projectTypeConfig];
+          {filteredProjects.map((project: any, idx: number) => {
+            const projectTypeKey = (project?.project_type?.toLowerCase() || 'residential') as keyof typeof projectTypeConfig;
+            const config = projectTypeConfig[projectTypeKey] || projectTypeConfig.residential;
+            const safeCost = Number(project?.total_cost || 0).toLocaleString('en-IN');
+            const safeStatus = (project?.status || 'in_progress').replace('_', ' ');
+
             return (
               <motion.div
-                key={project.id}
+                key={project.id || idx}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
                 className="group"
               >
-                <Link to={`/projects/${project.id}`} onClick={() => setCurrentProject(project)}>
+                <Link to={`/projects/${project.id}`} onClick={() => context.setCurrentProject && context.setCurrentProject(project)}>
                   <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 overflow-hidden group-hover:shadow-lg group-hover:shadow-amber-500/5">
                     <div className={`h-1.5 ${
                       project.project_type === 'residential' ? 'bg-gradient-to-r from-blue-500 to-blue-600' :
@@ -138,9 +176,11 @@ export default function Projects() {
                                 className="absolute right-0 top-8 w-36 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl z-10 py-1"
                                 onClick={e => e.stopPropagation()}
                               >
-                                <button onClick={async () => { setOpenMenu(null); const dup = await duplicateProject(project.id); if (dup) setCurrentProject(dup); }} className="w-full px-3 py-2 text-left text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2">
-                                  <Copy className="w-3.5 h-3.5" /> Duplicate
-                                </button>
+                                {context.duplicateProject && (
+                                  <button onClick={async () => { setOpenMenu(null); const dup = await context.duplicateProject(project.id); if (dup && context.setCurrentProject) context.setCurrentProject(dup); }} className="w-full px-3 py-2 text-left text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2">
+                                    <Copy className="w-3.5 h-3.5" /> Duplicate
+                                  </button>
+                                )}
                                 <button onClick={() => { setOpenMenu(null); handleDelete(project.id); }} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2">
                                   <Trash2 className="w-3.5 h-3.5" /> Delete
                                 </button>
@@ -149,19 +189,19 @@ export default function Projects() {
                           </AnimatePresence>
                         </div>
                       </div>
-                      <h3 className="font-semibold text-slate-900 dark:text-white group-hover:text-amber-400 transition-colors truncate">{project.name}</h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{project.client_name}</p>
+                      <h3 className="font-semibold text-slate-900 dark:text-white group-hover:text-amber-400 transition-colors truncate">{project?.name || 'Untitled Project'}</h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{project?.client_name || 'N/A'}</p>
                       <div className="flex items-center gap-4 mt-3 text-xs text-slate-400 dark:text-slate-500">
-                        <span>{project.location}</span>
-                        <span>{project.date}</span>
+                        <span>{project?.location || 'N/A'}</span>
+                        <span>{project?.date || ''}</span>
                       </div>
                       <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-200 dark:border-slate-800">
-                        <span className={`text-[11px] font-medium px-2 py-1 rounded-full ${
-                          project.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' :
-                          project.status === 'in_progress' ? 'bg-amber-500/10 text-amber-400' :
+                        <span className={`text-[11px] font-medium px-2 py-1 rounded-full capitalize ${
+                          project?.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' :
+                          project?.status === 'in_progress' ? 'bg-amber-500/10 text-amber-400' :
                           'bg-slate-200 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400'
-                        }`}>{project.status.replace('_', ' ')}</span>
-                        <span className="text-sm font-bold text-slate-900 dark:text-white">₹{project.total_cost.toLocaleString('en-IN')}</span>
+                        }`}>{safeStatus}</span>
+                        <span className="text-sm font-bold text-slate-900 dark:text-white">₹{safeCost}</span>
                       </div>
                     </div>
                   </div>
@@ -207,7 +247,7 @@ export default function Projects() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6"
+              className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-6">
@@ -216,17 +256,17 @@ export default function Projects() {
               </div>
 
               <form onSubmit={handleCreate} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm text-slate-600 dark:text-slate-300 mb-1.5 block">Project Name</label>
+                    <label className="text-sm text-slate-600 dark:text-slate-300 mb-1.5 block">Project Name *</label>
                     <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="w-full px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:border-amber-500/50 outline-none" placeholder="e.g. Skyline Tower" />
                   </div>
                   <div>
                     <label className="text-sm text-slate-600 dark:text-slate-300 mb-1.5 block">Client Name</label>
-                    <input value={form.client_name} onChange={e => setForm({...form, client_name: e.target.value})} required className="w-full px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:border-amber-500/50 outline-none" placeholder="e.g. ABC Corp" />
+                    <input value={form.client_name} onChange={e => setForm({...form, client_name: e.target.value})} className="w-full px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:border-amber-500/50 outline-none" placeholder="e.g. ABC Corp" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm text-slate-600 dark:text-slate-300 mb-1.5 block">Location</label>
                     <input value={form.location} onChange={e => setForm({...form, location: e.target.value})} className="w-full px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:border-amber-500/50 outline-none" placeholder="e.g. Mumbai" />
@@ -236,7 +276,7 @@ export default function Projects() {
                     <input value={form.engineer_name} onChange={e => setForm({...form, engineer_name: e.target.value})} className="w-full px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:border-amber-500/50 outline-none" placeholder="e.g. Er. Sharma" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm text-slate-600 dark:text-slate-300 mb-1.5 block">Project Type</label>
                     <select value={form.project_type} onChange={e => setForm({...form, project_type: e.target.value as ProjectType})} className="w-full px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm focus:border-amber-500/50 outline-none">
