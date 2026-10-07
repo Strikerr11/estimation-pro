@@ -97,3 +97,4 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 };
 
 export const useProjects = () => useContext(ProjectContext);
+export const useProject = () => useContext(ProjectContext);
