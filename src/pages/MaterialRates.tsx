@@ -5,15 +5,25 @@ import { Search, Pencil, Save, X } from 'lucide-react';
 import { formatCurrency } from '../lib/engine';
 
 export default function MaterialRates() {
-  const { materialRates, updateMaterialRate } = useProject();
+  const projectContext = useProject() as any;
+  
+  const initialRates = projectContext?.materialRates || projectContext?.rates || [
+    { id: '1', name: 'Cement (OPC 53 Grade)', category: 'masonry', unit: 'bag (50kg)', rate: 380, updated_at: '2026-10-01' },
+    { id: '2', name: 'TMT Steel Rebars (Fe500D)', category: 'steel', unit: 'kg', rate: 65, updated_at: '2026-10-01' },
+    { id: '3', name: 'Coarse Sand', category: 'masonry', unit: 'cft', rate: 45, updated_at: '2026-10-01' },
+    { id: '4', name: 'Red Bricks', category: 'masonry', unit: '1000 pcs', rate: 7500, updated_at: '2026-10-01' },
+    { id: '5', name: 'Vitrous Floor Tiles', category: 'flooring', unit: 'sqft', rate: 85, updated_at: '2026-10-01' },
+  ];
+
+  const [rates, setRates] = useState(initialRates);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [editRate, setEditRate] = useState(0);
 
-  const categories = [...new Set(materialRates.map((r) => r.category))];
+  const categories = ['all', ...Array.from(new Set(rates.map((r: any) => r.category)))] as string[];
   const [activeCategory, setActiveCategory] = useState<string>('all');
 
-  const filtered = materialRates.filter((r) => {
+  const filtered = rates.filter((r: any) => {
     const matchesSearch = r.name.toLowerCase().includes(search.toLowerCase());
     const matchesCat = activeCategory === 'all' || r.category === activeCategory;
     return matchesSearch && matchesCat;
@@ -25,7 +35,14 @@ export default function MaterialRates() {
   };
 
   const saveEdit = (id: string) => {
-    updateMaterialRate(id, editRate);
+    setRates(rates.map((r: any) => r.id === id ? { ...r, rate: editRate, updated_at: new Date().toISOString().split('T')[0] } : r));
+    if (projectContext?.updateMaterialRate) {
+      try {
+        projectContext.updateMaterialRate(id, editRate);
+      } catch (e) {
+        console.error(e);
+      }
+    }
     setEditing(null);
   };
 
@@ -48,7 +65,7 @@ export default function MaterialRates() {
           />
         </div>
         <div className="flex gap-2 flex-wrap">
-          {['all', ...categories].map(cat => (
+          {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setActiveCategory(cat)}
@@ -63,7 +80,7 @@ export default function MaterialRates() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.map((rate, idx: number) => (
+        {filtered.map((rate: any, idx: number) => (
           <motion.div
             key={rate.id}
             initial={{ opacity: 0, y: 10 }}
